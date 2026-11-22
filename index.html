@@ -59,7 +59,17 @@ th, td { padding: .4rem .5rem; text-align: right; border-bottom: 1px solid var(-
 th { color: var(--ink2); font-weight: 600; }
 th:first-child, td:first-child, td.text, th.text { text-align: left; }
 .scroll { overflow-x: auto; }
-@media (max-width: 40rem) { .tiles { grid-template-columns: 1fr 1fr; } .tiles .hero { grid-column: 1 / -1; } }
+.filters fieldset { flex-wrap: wrap; row-gap: .4rem; }
+.filters button, .filters legend, .toggle, th, td { white-space: nowrap; }
+@media (max-width: 40rem) {
+  .tiles { grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+  .tiles .hero { grid-column: 1 / -1; }
+  .tiles .card:not(.hero) { padding: .75rem .8rem; }
+  .tiles .card:not(.hero) dd { font-size: 1.4rem; }
+  .card { padding: 1rem; }
+  table { font-size: .8rem; }
+  th, td { padding: .4rem .3rem; }
+}
 </style>
 <body class="viz-root">
 <main>
