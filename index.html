@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>手機專注盒紀錄</title>
+<style>
+.viz-root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10); --wash: rgba(11,11,11,.05);
+  --series1: #2a78d6; --series2: #eb6834;
+}
+@media (prefers-color-scheme: dark) {
+  .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10); --wash: rgba(255,255,255,.07);
+    --series1: #3987e5; --series2: #d95926;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif; }
+main { max-width: 60rem; margin: auto; padding: 2rem 1.25rem 4rem; }
+h1 { margin: 0; font-size: 1.5rem; }
+h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+.sub { margin: .2rem 0 0; color: var(--ink2); font-size: .85rem; }
+#notice { margin: 1rem 0 0; padding: .6rem .9rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--surface); color: var(--ink2); font-size: .85rem; }
+.filters { display: flex; flex-wrap: wrap; gap: 1.25rem; margin: 1.5rem 0 1rem; }
+.filters fieldset { display: flex; align-items: center; gap: .25rem; margin: 0; padding: 0; border: 0; }
+.filters legend { float: left; margin-right: .5rem; padding: 0; color: var(--ink2); font-size: .85rem; }
+.filters button, .toggle { font: inherit; font-size: .85rem; padding: .3rem .75rem; color: var(--ink2); background: none; border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+.filters button:hover, .toggle:hover { background: var(--wash); }
+.filters button[aria-pressed="true"] { color: var(--surface); background: var(--ink); border-color: var(--ink); font-weight: 600; }
+.card { margin: 0 0 1rem; padding: 1.1rem 1.25rem 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: .75rem; }
+.tiles { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+.tiles .card { margin: 0; min-width: 0; }
+.tiles dt { color: var(--ink2); font-size: .85rem; }
+.tiles dd { margin: .2rem 0 0; font-size: 1.7rem; font-weight: 600; line-height: 1.2; }
+.tiles .hero dd { font-size: 3rem; }
+.tiles small { display: block; margin-top: .25rem; color: var(--muted); font-size: .8rem; font-weight: 400; }
+dl { margin: 0; }
+.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
+.legend { display: flex; gap: 1rem; margin: 0 0 .5rem; padding: 0; list-style: none; color: var(--ink2); font-size: .85rem; }
+.legend i { display: inline-block; width: .7rem; height: .7rem; margin-right: .35rem; border-radius: 2px; }
+.plot { position: relative; }
+.plot svg { display: block; width: 100%; overflow: visible; }
+.plot text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.plot text.value { fill: var(--ink2); font-weight: 600; }
+.plot .hit { fill: transparent; outline: none; }
+.plot .hit:hover, .plot .hit:focus-visible { fill: var(--wash); }
+.empty { padding: 3rem 0; text-align: center; color: var(--muted); }
+#tip { position: fixed; z-index: 2; pointer-events: none; min-width: 9rem; padding: .5rem .7rem; background: var(--surface); border: 1px solid var(--border); border-radius: .5rem; box-shadow: 0 4px 16px rgba(0,0,0,.15); font-size: .8rem; }
+#tip b { display: block; margin-bottom: .2rem; color: var(--ink2); font-weight: 400; }
+#tip div { display: flex; align-items: center; gap: .4rem; }
+#tip i { width: .75rem; height: 2px; }
+#tip strong { margin-left: auto; padding-left: .75rem; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+th, td { padding: .4rem .5rem; text-align: right; border-bottom: 1px solid var(--grid); }
+th { color: var(--ink2); font-weight: 600; }
+th:first-child, td:first-child, td.text, th.text { text-align: left; }
+.scroll { overflow-x: auto; }
+@media (max-width: 40rem) { .tiles { grid-template-columns: 1fr 1fr; } .tiles .hero { grid-column: 1 / -1; } }
+</style>
+<body class="viz-root">
+<main>
+  <h1>手機專注盒紀錄</h1>
+  <p class="sub" id="updated">載入中…</p>
+  <p id="notice" hidden></p>
+
+  <div class="filters">
+    <fieldset id="rangeFilter"><legend>期間</legend></fieldset>
+    <fieldset id="modeFilter"><legend>版本</legend></fieldset>
+  </div>
+
+  <dl class="tiles">
+    <div class="card hero"><dt>專注時間</dt><dd id="tileFocus">—</dd></div>
+    <div class="card"><dt>完成輪數</dt><dd id="tileDone">—</dd></div>
+    <div class="card"><dt>中斷次數</dt><dd id="tileCut">—</dd></div>
+    <div class="card"><dt>完成率</dt><dd id="tileRate">—</dd></div>
+  </dl>
+
+  <figure class="card">
+    <div class="head"><div><h2>每日專注時間</h2><p class="sub" id="focusUnit"></p></div>
+      <button class="toggle" data-table="focusTable" aria-expanded="false">顯示表格</button></div>
+    <div class="plot" id="focusChart"></div>
+    <div class="scroll" id="focusTable" hidden></div>
+  </figure>
+
+  <figure class="card">
+    <div class="head"><div><h2>每日輪數</h2><p class="sub">每一輪結束時記為完成或中斷</p></div>
+      <button class="toggle" data-table="roundTable" aria-expanded="false">顯示表格</button></div>
+    <ul class="legend"><li><i style="background:var(--series1)"></i>完成</li><li><i style="background:var(--series2)"></i>中斷</li></ul>
+    <div class="plot" id="roundChart"></div>
+    <div class="scroll" id="roundTable" hidden></div>
+  </figure>
+
+  <section class="card">
+    <div class="head"><h2>最近 20 筆紀錄</h2></div>
+    <div class="scroll" id="recentTable"></div>
+  </section>
+</main>
+<div id="tip" hidden></div>
+
+<script>
+// 試算表「檔案 → 共用 → 發布到網路」取得的 CSV 連結；留空時顯示示範資料。
+const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRR0FyJBeNkZ1RbFet8iRBTdi9DZabhH4QoF36Si5K8ryyfR0reZSz7rQFaX8OdAljpo_yQnQIPPa00/pub?output=csv";
+const refreshSeconds = 60;
+
+const ranges = [["7", "近 7 天"], ["30", "近 30 天"], ["all", "全部"]];
+const modes = [["all", "全部"], ["formal", "正式（5 分鐘以上）"], ["demo", "展示（30 秒）"]];
+const state = { range: "7", mode: "all", rows: [], sample: false };
+const el = id => document.getElementById(id);
+const svgNs = "http://www.w3.org/2000/svg";
+
+function node(tag, attrs = {}, text) {
+  const n = tag === "svg" || ["g", "rect", "path", "line", "text"].includes(tag)
+    ? document.createElementNS(svgNs, tag) : document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+function parseCsv(text) {
+  const rows = [[]];
+  let cell = "", quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') quoted = false;
+      else cell += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") { rows[rows.length - 1].push(cell); cell = ""; }
+    else if (c === "\n") { rows[rows.length - 1].push(cell); cell = ""; rows.push([]); }
+    else if (c !== "\r") cell += c;
+  }
+  rows[rows.length - 1].push(cell);
+  return rows.filter(r => r.some(v => v !== ""));
+}
+
+// 接受 "2026-11-22 13:45:31" 與試算表的 "2026/11/22 下午 1:45:31"，回傳 [日期, 時間]。
+function parseStamp(text) {
+  const m = /(\d{4})[-/](\d{1,2})[-/](\d{1,2})\s*(上午|下午)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(text || "");
+  if (!m) return null;
+  let hour = +m[5];
+  if (m[4] === "下午" && hour < 12) hour += 12;
+  if (m[4] === "上午" && hour === 12) hour = 0;
+  const pad = v => String(v).padStart(2, "0");
+  return [`${m[1]}-${pad(m[2])}-${pad(m[3])}`, `${pad(hour)}:${m[6]}:${m[7] || "00"}`];
+}
+
+const number = text => +String(text || "").replace(/,/g, "") || 0;
+
+function toRows(table) {
+  const head = table[0].map(h => h.trim());
+  const col = name => head.indexOf(name);
+  const idx = { stamp: col("時間戳記"), end: col("結束時間"), result: col("結果"), seconds: col("本輪專注秒數"), round: col("設定時長秒數") };
+  if (idx.result < 0 || idx.seconds < 0) throw new Error("找不到「結果」或「本輪專注秒數」欄位");
+  return table.slice(1).map(r => {
+    const when = parseStamp(r[idx.end]) || parseStamp(r[idx.stamp]);
+    const result = (r[idx.result] || "").trim();
+    if (!when || (result !== "完成" && result !== "中斷")) return null;
+    return { day: when[0], time: when[1], complete: result === "完成", seconds: number(r[idx.seconds]), round: number(r[idx.round]) };
+  }).filter(Boolean).sort((a, b) => (a.day + a.time).localeCompare(b.day + b.time));
+}
+
+function taipeiDay(offset = 0) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+  return shiftDay(parts, offset);
+}
+function shiftDay(day, offset) {
+  const d = new Date(day + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d.toISOString().slice(0, 10);
+}
+
+function sampleRows() {
+  const rows = [];
+  let seed = 7;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let back = 13; back >= 0; back--) {
+    const rounds = Math.floor(random() * 5) + (back % 7 === 3 ? 0 : 1);
+    for (let i = 0; i < rounds; i++) {
+      const complete = random() > 0.28;
+      rows.push({ day: taipeiDay(-back), time: `${String(19 + (i >> 1)).padStart(2, "0")}:${i % 2 ? "35" : "05"}:00`, complete,
+        seconds: complete ? 1500 : Math.floor(120 + random() * 1200), round: 1500 });
+    }
+  }
+  return rows;
+}
+
+function duration(seconds) {
+  if (seconds < 60) return `${seconds} 秒`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分 ${String(seconds % 60).padStart(2, "0")} 秒`;
+  return `${Math.floor(seconds / 3600)} 小時 ${String(Math.floor(seconds % 3600 / 60)).padStart(2, "0")} 分`;
+}
+
+function selected() {
+  const rows = state.rows.filter(r => state.mode === "all" || (state.mode === "formal") === (r.round >= 300));
+  const last = taipeiDay();
+  let first = state.range === "all" ? (rows[0] ? rows[0].day : last) : shiftDay(last, 1 - state.range);
+  if (first > last) first = last;
+  const days = [];
+  for (let d = first; d <= last; d = shiftDay(d, 1)) days.push({ day: d, seconds: 0, done: 0, cut: 0 });
+  const byDay = new Map(days.map(d => [d.day, d]));
+  const inRange = rows.filter(r => byDay.has(r.day));
+  for (const r of inRange) {
+    const d = byDay.get(r.day);
+    d.seconds += r.seconds;
+    r.complete ? d.done++ : d.cut++;
+  }
+  return { days, rows: inRange };
+}
+
+function niceTicks(max) {
+  if (max <= 0) return [0, 1];
+  const rough = max / 4, power = 10 ** Math.floor(Math.log10(rough));
+  const step = [1, 2, 5, 10].map(m => m * power).find(s => s >= rough);
+  const ticks = [];
+  for (let v = 0; v < max + step - 1e-9; v += step) ticks.push(+v.toFixed(6));
+  return ticks;
+}
+
+// series：[{ name, color, values[] }]，同一天由下往上堆疊。
+function drawColumns(host, days, series, format, labelLast) {
+  host.replaceChildren();
+  const totals = days.map((_, i) => series.reduce((s, x) => s + x.values[i], 0));
+  if (!totals.some(Boolean)) { host.append(node("p", { class: "empty" }, "這段期間沒有紀錄")); return; }
+  const width = Math.max(host.clientWidth, 280), height = 240;
+  const pad = { left: 44, right: 12, top: 20, bottom: 26 };
+  const plotW = width - pad.left - pad.right, plotH = height - pad.top - pad.bottom;
+  const ticks = niceTicks(Math.max(...totals)), top = ticks[ticks.length - 1];
+  const y = v => pad.top + plotH - v / top * plotH;
+  const band = plotW / days.length, bar = Math.max(3, Math.min(24, band - 2));
+  const svg = node("svg", { viewBox: `0 0 ${width} ${height}`, height, role: "img", "aria-label": series.map(s => s.name).join("、") + "，依日期" });
+  for (const t of ticks) {
+    svg.append(node("line", { x1: pad.left, x2: width - pad.right, y1: y(t), y2: y(t), stroke: t ? "var(--grid)" : "var(--axis)" }));
+    svg.append(node("text", { x: pad.left - 8, y: y(t) + 4, "text-anchor": "end" }, format(t, true)));
+  }
+  const every = Math.ceil(days.length / Math.floor(plotW / 44));
+  days.forEach((d, i) => {
+    const cx = pad.left + band * (i + 0.5);
+    if ((days.length - 1 - i) % every === 0)
+      svg.append(node("text", { x: cx, y: height - 8, "text-anchor": "middle" }, `${+d.day.slice(5, 7)}/${+d.day.slice(8)}`));
+    let base = 0;
+    const live = series.filter(s => s.values[i] > 0);
+    live.forEach((s, k) => {
+      const y0 = y(base), y1 = y(base + s.values[i]);
+      base += s.values[i];
+      const gap = k ? 2 : 0, h = Math.max(1, y0 - y1 - gap), r = k === live.length - 1 ? Math.min(4, h, bar / 2) : 0, x = cx - bar / 2;
+      svg.append(node("path", { fill: s.color, d: `M${x},${y0 - gap}v${-(h - r)}q0,${-r} ${r},${-r}h${bar - 2 * r}q${r},0 ${r},${r}v${h - r}z` }));
+    });
+    if (labelLast && i === days.length - 1 && totals[i])
+      svg.append(node("text", { class: "value", x: Math.min(cx, width - pad.right - 2), y: y(totals[i]) - 6, "text-anchor": cx > width - 60 ? "end" : "middle" }, format(totals[i])));
+    const hit = node("rect", { class: "hit", x: pad.left + band * i, y: pad.top, width: band, height: plotH, tabindex: 0,
+      "aria-label": `${d.day}：` + series.map(s => `${s.name} ${format(s.values[i])}`).join("，") });
+    const show = e => showTip(e, d.day, series.map(s => [s.name, s.color, format(s.values[i])]), hit);
+    hit.addEventListener("pointermove", show);
+    hit.addEventListener("focus", show);
+    hit.addEventListener("pointerleave", hideTip);
+    hit.addEventListener("blur", hideTip);
+    svg.append(hit);
+  });
+  host.append(svg);
+}
+
+function showTip(event, title, items, target) {
+  const tip = el("tip");
+  tip.replaceChildren(node("b", {}, title), ...items.map(([name, color, value]) => {
+    const row = node("div");
+    row.append(node("i", { style: `background:${color}` }), node("span", {}, name), node("strong", {}, value));
+    return row;
+  }));
+  tip.hidden = false;
+  const box = target.getBoundingClientRect();
+  const x = event.clientX || box.left + box.width / 2, yPos = event.clientY || box.top + 20;
+  tip.style.left = Math.min(x + 14, innerWidth - tip.offsetWidth - 8) + "px";
+  tip.style.top = Math.max(8, yPos - tip.offsetHeight - 10) + "px";
+}
+function hideTip() { el("tip").hidden = true; }
+
+function fillTable(host, head, rows, textCols = []) {
+  const table = node("table"), tr = node("tr");
+  head.forEach((h, i) => tr.append(node("th", i === 0 || textCols.includes(i) ? { class: "text" } : {}, h)));
+  table.append(tr);
+  for (const r of rows) {
+    const line = node("tr");
+    r.forEach((v, i) => line.append(node("td", textCols.includes(i) ? { class: "text" } : {}, String(v))));
+    table.append(line);
+  }
+  host.replaceChildren(rows.length ? table : node("p", { class: "empty" }, "這段期間沒有紀錄"));
+}
+
+function render() {
+  const { days, rows } = selected();
+  const seconds = rows.reduce((s, r) => s + r.seconds, 0), done = rows.filter(r => r.complete).length, cut = rows.length - done;
+  el("tileFocus").textContent = duration(seconds);
+  el("tileDone").textContent = done;
+  el("tileCut").textContent = cut;
+  el("tileRate").replaceChildren(rows.length ? `${Math.round(done / rows.length * 100)}%` : "—", node("small", {}, `共 ${rows.length} 輪`));
+
+  const inMinutes = Math.max(...days.map(d => d.seconds), 0) >= 600;
+  el("focusUnit").textContent = inMinutes ? "單位：分鐘" : "單位：秒";
+  const focusFormat = (v, axis) => axis ? String(v) : duration(inMinutes ? Math.round(v * 60) : v);
+  drawColumns(el("focusChart"), days, [{ name: "專注時間", color: "var(--series1)", values: days.map(d => inMinutes ? d.seconds / 60 : d.seconds) }], focusFormat, true);
+  drawColumns(el("roundChart"), days, [
+    { name: "完成", color: "var(--series1)", values: days.map(d => d.done) },
+    { name: "中斷", color: "var(--series2)", values: days.map(d => d.cut) }], v => String(v), false);
+
+  const dayRows = [...days].reverse();
+  fillTable(el("focusTable"), ["日期", "專注時間"], dayRows.map(d => [d.day, duration(d.seconds)]));
+  fillTable(el("roundTable"), ["日期", "完成", "中斷"], dayRows.map(d => [d.day, d.done, d.cut]));
+  fillTable(el("recentTable"), ["結束時間", "結果", "專注時間", "設定時長"],
+    [...rows].reverse().slice(0, 20).map(r => [`${r.day} ${r.time}`, r.complete ? "完成" : "中斷", duration(r.seconds), duration(r.round)]), [1]);
+}
+
+function buildFilter(host, options, key) {
+  for (const [value, label] of options) {
+    const button = node("button", { type: "button", "aria-pressed": String(state[key] === value) }, label);
+    button.addEventListener("click", () => {
+      state[key] = value;
+      for (const b of host.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b === button));
+      render();
+    });
+    host.append(button);
+  }
+}
+
+async function load() {
+  document.querySelector("main").style.opacity = state.rows.length ? ".6" : "1";
+  try {
+    if (csvUrl) {
+      const response = await fetch(csvUrl, { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      state.rows = toRows(parseCsv(await response.text()));
+    } else {
+      state.rows = sampleRows();
+      state.sample = true;
+    }
+    el("notice").hidden = !state.sample;
+    el("notice").textContent = "目前顯示的是示範資料，尚未設定試算表的 CSV 連結。";
+    el("updated").textContent = `資料更新於 ${new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", dateStyle: "medium", timeStyle: "short" }).format(new Date())}（台灣時間）`;
+  } catch (error) {
+    el("notice").hidden = false;
+    el("notice").textContent = `讀取試算表失敗：${error.message}`;
+  }
+  document.querySelector("main").style.opacity = "1";
+  render();
+}
+
+buildFilter(el("rangeFilter"), ranges, "range");
+buildFilter(el("modeFilter"), modes, "mode");
+for (const button of document.querySelectorAll(".toggle"))
+  button.addEventListener("click", () => {
+    const table = el(button.dataset.table);
+    table.hidden = !table.hidden;
+    button.setAttribute("aria-expanded", String(!table.hidden));
+    button.textContent = table.hidden ? "顯示表格" : "隱藏表格";
+  });
+addEventListener("resize", render);
+load();
+if (csvUrl) setInterval(load, refreshSeconds * 1000);
+</script>
+</html>
